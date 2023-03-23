@@ -412,6 +412,7 @@ GEONODE_CORE_APPS = (
     'geonode.catalogue',
     'geonode.catalogue.metadataxsl',
     'geonode.harvesting',
+    'geonode.livinglabdata',
 )
 
 # GeoNode Apps
@@ -491,6 +492,7 @@ INSTALLED_APPS = (
     'django_celery_results',
     'markdownify',
     'django_user_agents',
+    'django_celery_beat',
 
     # REST APIs
     'rest_framework',

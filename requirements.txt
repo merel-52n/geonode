@@ -30,6 +30,7 @@ PyMuPDF==1.21.0
 # Django Apps
 django-allauth==0.51.0
 django-appconf==1.0.5
+django-celery-beat==2.4.0
 django-celery-results==2.4.0
 django-filter==22.1
 django-imagekit==4.1.0
@@ -60,6 +61,8 @@ Shapely==1.8.5.post1
 mercantile==1.2.1
 geoip2==4.6.0
 numpy==1.23.*
+geopandas==0.12.2
+pandas==1.5.3
 
 # # Apps with packages provided in GeoNode's PPA on Launchpad.
 
