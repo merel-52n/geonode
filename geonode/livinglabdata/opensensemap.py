@@ -1,7 +1,6 @@
 import requests
 import datetime
 import os
-import json
 import geopandas as gpd
 import pandas as pd
 from shapely.geometry import Point
@@ -9,7 +8,7 @@ from shapely.geometry import Point
 def get_city_bounding_box(city_name):
     """"
     Function to retrieve bounding box coordinates of a city. Input is city name as a string.
-    Needed to get sensor ID's of boxes within the city from the opensensemap API.
+    Result can be used as input argument for function "get_box_data" which gets sensorbox data for all boxes within the given bounding box.
     """
     # Set the base URL for the API
     base_url = "https://nominatim.openstreetmap.org/search"
@@ -96,23 +95,6 @@ def get_box_data(bounding_box, phenomenon, start_date=None, end_date=None, limit
         with open(filepath, 'wb') as f:
             f.write(response.content)
 
-        # Post generated csv to the GeoNode API
-        files=[
-            ('csv_file', (filename, open(filepath, 'rb'), 'text/csv'))
-        ]
-        print(files)
-
-        headers = {
-            'Authorization': 'Basic YWRtaW46YWRtaW4='
-        }
-
-        url = "http://localhost/api/v2/uploads/upload"
-        
-        response2 = requests.post(url, headers=headers, files=files)
-        print(response2.url)
-        print(response2.reason)
-        print(response2.text)
-
     # If the request was not successful, print and return the error message
     else:
         print(response.text)
@@ -124,43 +106,12 @@ def get_box_data(bounding_box, phenomenon, start_date=None, end_date=None, limit
 
 filename = "PM2.5_2023-03-01.csv"
 filepath = os.path.join('geonode', 'livinglabdata', 'data', filename)
-filepath2 = os.path.join('geonode', 'livinglabdata', 'data', 'shp')
 
-# files={
-#     'base_file': open(filepath, 'rb')
-# }
-
-data = {
-    "non_interactive": True,
-    "lat": "lat",
-    "lng": "lon",
-    "crs": "EPSG:4326"
-}
-
-files = {
-    'base_file': ("data.csv", open(filepath, 'rb'), "application/octet-stream"),
-}
-
-files2 = [
-    ('base_file', ('mabegondo.shp', open(os.path.join(filepath2, 'mabegondo.shp'), 'rb'), 'application/octet-stream')),
-    ('dbf_file', ('mabegondo.dbf', open(os.path.join(filepath2, 'mabegondo.dbf'), 'rb'), 'application/octet-stream')),
-    ('shx_file', ('mabegondo.shx', open(os.path.join(filepath2, 'mabegondo.shx'), 'rb'), 'application/octet-stream')),
-    ('prj_file', ('mabegondo.prj', open(os.path.join(filepath2, 'mabegondo.prj'), 'rb'), 'application/octet-stream'))
-]
-
-headers = {
-    'Authorization': 'Basic YWRtaW46YWRtaW4='
-        }
-
-url = "http://localhost/api/v2/uploads/upload"
-        
-#response2 = requests.post(url, headers=headers, files=files2)
-#print(response2.status_code)
-#print(response2.text)
-
-def csv_to_shp(filename):
+def csv_to_gpkg(filename, crs=None):
      # Read the CSV file into a pandas dataframe
     df = pd.read_csv(filename)
+    
+    print(f"File contents to be converted: {df}")
 
     # Create a point geometry for each station
     geometry = [Point(xy) for xy in zip(df.lon, df.lat)]
@@ -168,12 +119,49 @@ def csv_to_shp(filename):
     # Create a geopandas dataframe
     gdf = gpd.GeoDataFrame(df, geometry=geometry)
 
-    # Define the data types for each field
-    gdf = gdf.astype({'sensorId': 'string', 'createdAt': 'datetime64[ns]', 'value': 'float'})
+    # Use WGS84 if no other CRS is specified
+    if crs is None:
+        crs='EPSG:4326'
 
-    # remove .csv and add .shp to save as shapefile
-    shp_filename = filename[:-4] + '.shp'  
-    # Save the geopandas dataframe as a shapefile
-    gdf.to_file(shp_filename, driver='ESRI Shapefile')
+    # remove .csv and add .gpkg to filename and save as GeoPackage
+    gpkg_filename = filename[:-4] + '.gpkg'  
 
-b = 6
+    gdf.to_file(gpkg_filename, driver='GPKG', crs=crs)
+
+    print(f"Succesfully converted csv into GeoPackage: file is in {gpkg_filename}")
+
+def post_gpkg_to_geoserver(geopackage_path, layer_name):
+    
+    # Set GeoServer info -- posting to already existing GeoNode data store
+    geoserver_username='admin'
+    geoserver_password='geoserver'
+    geoserver_url='http://localhost/geoserver'
+    workspace_name='geonode'
+    datastore_name='geonode_data'
+    
+    # Prepare the data for uploading
+    files = {'file': open(geopackage_path, 'rb')}
+    data = {
+        'name': layer_name,
+        'type': 'geopackage',
+        'description': 'GeoPackage containing OpenSenseMap data for Budapest',
+        'enabled': 'true',
+        'overwrite': 'true',
+        'configure': 'all'
+    }
+
+    # Set the headers for authentication and content type
+    headers = {'Content-type': 'application/json'}
+    auth = (geoserver_username, geoserver_password)
+
+    # Publish the layer
+    response = requests.post(f'{geoserver_url}/rest/workspaces/{workspace_name}/datastores/{datastore_name}/featuretypes',
+                             headers=headers, auth=auth, json={'featureType': data})
+
+    if response.status_code == 201:
+        print(f'Layer {layer_name} published successfully.')
+        return True
+    else:
+        print(f'Error publishing layer: {response.text}')
+        return False
+

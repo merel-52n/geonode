@@ -1,4 +1,4 @@
-from .opensensemap import get_city_bounding_box, get_box_ids, get_box_data
+from .opensensemap import get_city_bounding_box, get_box_data
 from .constants import bbox_budapest
 
 from geonode.celery_app import app
@@ -47,27 +47,6 @@ PeriodicTask.objects.get_or_create(
     task='geonode.livinglabdata.tasks.get_city_bounding_box_task',
     enabled=False
 )
-
-
-@app.task(
-    bind=True,
-    queue='geonode',
-    name='get_sensorbox_ids',
-    acks_late=False,
-    ignore_result=False,
-)
-def get_sensorbox_ids_task(self):
-    logger.info("Running get_sensorbox_ids_task task")
-    r = get_box_ids(bbox_budapest)
-    print(r)
-
-PeriodicTask.objects.get_or_create(
-    interval=schedule1m,
-    name='get_sensorbox_ids',
-    task='geonode.livinglabdata.get_sensorbox_ids_task',
-    enabled=False
-)
-
 
 @app.task(
     bind=True,
