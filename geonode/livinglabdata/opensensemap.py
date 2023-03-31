@@ -4,6 +4,8 @@ import os
 import geopandas as gpd
 import pandas as pd
 from shapely.geometry import Point
+from geoserver.catalog import Catalog
+from geoserver.util import shapefile_and_friends
 
 def get_city_bounding_box(city_name):
     """"
@@ -131,7 +133,10 @@ def csv_to_gpkg(filename, crs=None):
     print(f"Succesfully converted csv into GeoPackage: file is in {gpkg_filename}")
 
 def post_gpkg_to_geoserver(geopackage_path, layer_name):
-    
+    """
+    Uploading a GeoPackage to GeoServer using the built-in Data Store called "geonode_data" provided by GeoNode. 
+    """
+
     # Set GeoServer info -- posting to already existing GeoNode data store
     geoserver_username='admin'
     geoserver_password='geoserver'
@@ -139,6 +144,9 @@ def post_gpkg_to_geoserver(geopackage_path, layer_name):
     workspace_name='geonode'
     datastore_name='geonode_data'
     
+    # Compose the post url from above info
+    url = f'{geoserver_url}/rest/workspaces/{workspace_name}/datastores/{datastore_name}/featuretypes'
+
     # Prepare the data for uploading
     files = {'file': open(geopackage_path, 'rb')}
     data = {
@@ -155,8 +163,7 @@ def post_gpkg_to_geoserver(geopackage_path, layer_name):
     auth = (geoserver_username, geoserver_password)
 
     # Publish the layer
-    response = requests.post(f'{geoserver_url}/rest/workspaces/{workspace_name}/datastores/{datastore_name}/featuretypes',
-                             headers=headers, auth=auth, json={'featureType': data})
+    response = requests.post(url=url, headers=headers, auth=auth, json={'featureType': data})
 
     if response.status_code == 201:
         print(f'Layer {layer_name} published successfully.')
@@ -165,3 +172,66 @@ def post_gpkg_to_geoserver(geopackage_path, layer_name):
         print(f'Error publishing layer: {response.text}')
         return False
 
+def post_shp_to_geoserver(csv_path, layer_name):
+    """
+    Uploading a CSV to GeoServer using the built-in Data Store called "geonode_data" provided by GeoNode. 
+    """
+
+    # Set GeoServer info -- posting to already existing GeoNode data store
+    geoserver_username='admin'
+    geoserver_password='geoserver'
+    geoserver_url='http://localhost/geoserver'
+    workspace_name='geonode'
+    datastore_name='geonode_data'
+
+    # Compose the post url from above info
+    url = f'{geoserver_url}/rest/workspaces/{workspace_name}/datastores/{datastore_name}/featuretypes'
+
+    # Prepare the data for uploading
+    files = {'file': open(geopackage_path, 'rb')}
+    data = {
+        'name': layer_name,
+        'type': 'geopackage',
+        'description': 'GeoPackage containing OpenSenseMap data for Budapest',
+        'enabled': 'true',
+        'overwrite': 'true',
+        'configure': 'all'
+    }
+
+    # Set the headers for authentication and content type
+    headers = {'Content-type': 'application/json'}
+    auth = (geoserver_username, geoserver_password)
+
+    # Publish the layer
+    response = requests.post(url=url, headers=headers, auth=auth, json={'featureType': data})
+
+    if response.status_code == 201:
+        print(f'Layer {layer_name} published successfully.')
+        return True
+    else:
+        print(f'Error publishing layer: {response.text}')
+        return False
+
+def csv_to_shp(filename):
+     # Read the CSV file into a pandas dataframe
+    df = pd.read_csv(filename)
+
+    # Create a point geometry for each station
+    geometry = [Point(xy) for xy in zip(df.lon, df.lat)]
+
+    # Create a geopandas dataframe
+    gdf = gpd.GeoDataFrame(df, geometry=geometry)
+
+     # Use WGS84
+    crs='EPSG:4326'
+
+    # remove .csv and add .shp to save as shapefile
+    shp_filename = filename[:-4] + '.shp'  
+    # Save the geopandas dataframe as a shapefile
+    gdf.to_file(shp_filename, driver='ESRI Shapefile', crs=crs)
+
+data = shapefile_and_friends("/home/merel/software/geonode/geonode_copy/geonode/geonode/livinglabdata/data/shp/Temperatur_2023-02-24")
+
+cat = Catalog("http://localhost/geoserver/rest")
+
+cat.add_data_to_store(store = "geonode_data", name = "test_name", data=data)
